@@ -14,67 +14,68 @@ module.exports = function(content, map, meta) {
   const componentFilenameSuffix = options.componentFilenameSuffix;
   const recognizedExtensions = this._compilation.options.resolve.extensions;
 
-  const ast = babylon.parse(content, {
-    sourceType: 'module',
-    plugins: [
-      'dynamicImport',
-      'asyncGenerators',
-      'objectRestSpread',
-      'optionalCatchBinding',
-      'exportDefaultFrom',
-      'exportNamespaceFrom',
-      'optionalCatchBinding',
-      'throwExpressions'
-    ]
-  });
+  try {
+    const ast = babylon.parse(content, {
+      sourceType: 'module',
+      plugins: [
+        'dynamicImport',
+        'asyncGenerators',
+        'objectRestSpread',
+        'optionalCatchBinding',
+        'exportDefaultFrom',
+        'exportNamespaceFrom',
+        'optionalCatchBinding',
+        'throwExpressions'
+      ]
+    });
 
-  const dependencies = [];
+    const dependencies = [];
 
-  traverse(ast, {
-    enter(path) {
-      if(path.node.type === 'ImportDeclaration') {
-        const node = path.node;
-        const importTarget = node.source.value;
-        dependencies.push(importTarget);
+    traverse(ast, {
+      enter(path) {
+        if(path.node.type === 'ImportDeclaration') {
+          const node = path.node;
+          const importTarget = node.source.value;
+          dependencies.push(importTarget);
 
-        return;
-      }
-
-      if(path.node.type === 'CallExpression') {
-        const node = path.node;
-        const { arguments, callee } = node;
-        if(callee.type !== 'Identifier' || callee.name !== 'require') {
           return;
         }
 
-        const firstArg = arguments[0];
-        if(firstArg.type !== 'StringLiteral') {
-          return;
-        }
+        if(path.node.type === 'CallExpression') {
+          const node = path.node;
+          const { arguments, callee } = node;
+          if(callee.type !== 'Identifier' || callee.name !== 'require') {
+            return;
+          }
 
-        const requiredName = firstArg.value;
-        dependencies.push(requiredName);
+          const firstArg = arguments[0];
+          if(firstArg.type !== 'StringLiteral') {
+            return;
+          }
+
+          const requiredName = firstArg.value;
+          dependencies.push(requiredName);
+        }
       }
-    }
-  });
+    });
 
-  const fileImportDir = path.dirname(this.resource);
-  const importedAbsolutePaths = dependencies
-      .map(filepath => path.resolve(fileImportDir, filepath))
-      .map(filepath => path.relative(this.rootContext, filepath))
-      .map(filepath => "./" + filepath.replace(/\\/g, '/'))
-      .map(baseFilepath => {
-        const ext = ['', ...recognizedExtensions].find(ext => fs.existsSync(baseFilepath + ext));
-        if(ext !== undefined) {
-          return baseFilepath + ext;
-        }
+    const fileImportDir = path.dirname(this.resource);
+    const importedAbsolutePaths = dependencies
+        .map(filepath => path.resolve(fileImportDir, filepath))
+        .map(filepath => path.relative(this.rootContext, filepath))
+        .map(filepath => "./" + filepath.replace(/\\/g, '/'))
+        .map(baseFilepath => {
+          const ext = ['', ...recognizedExtensions].find(ext => fs.existsSync(baseFilepath + ext));
+          if(ext !== undefined) {
+            return baseFilepath + ext;
+          }
 
-        return null;
-      })
-      .filter(filepath => filepath);
+          return null;
+        })
+        .filter(filepath => filepath);
 
-  if (filename.endsWith(componentFilenameSuffix)) {
-    return `${content}
+    if (filename.endsWith(componentFilenameSuffix)) {
+      return `${content}
     {
     
       const __hotComponentLoader__module = arguments[0];
@@ -144,9 +145,12 @@ module.exports = function(content, map, meta) {
     
       handleReloading();
     }`;
+    }
+  } catch (e) {
+    console.warn('Filed to process file', e)
+    return content;
   }
+
 
   return content;
 };
-
-
